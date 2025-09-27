@@ -1,10 +1,12 @@
-﻿using ETL.Domain.Entities;
+﻿
+using ETL.Domain.Entities;
 using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 
-namespace ETL.Infrastructure.Services
+namespace ETL.Infraestructura.Services.Loader
 {
     public class DatabaseLoaderService
     {
@@ -21,12 +23,41 @@ namespace ETL.Infrastructure.Services
             connection.Open();
             Console.WriteLine("Database connection established.");
 
+            // Limpiar tablas antes de insertar para evitar duplicados
+            ClearTables(connection);
+
             BulkInsertCustomers(customers, connection);
             BulkInsertProducts(products, connection);
             BulkInsertOrders(orders, connection);
             BulkInsertOrderDetails(orderDetails, connection);
 
             Console.WriteLine("Data loaded successfully.");
+        }
+
+        private void ClearTables(SqlConnection connection)
+        {
+            Console.WriteLine("Limpiando tablas existentes...");
+
+            using var cmd = connection.CreateCommand();
+
+            // Eliminar en orden correcto respetando foreign keys
+            cmd.CommandText = "DELETE FROM OrderDetails";
+            cmd.ExecuteNonQuery();
+            Console.WriteLine("  - OrderDetails limpiados");
+
+            cmd.CommandText = "DELETE FROM Orders";
+            cmd.ExecuteNonQuery();
+            Console.WriteLine("  - Orders limpiados");
+
+            cmd.CommandText = "DELETE FROM Products";
+            cmd.ExecuteNonQuery();
+            Console.WriteLine("  - Products limpiados");
+
+            cmd.CommandText = "DELETE FROM Customers";
+            cmd.ExecuteNonQuery();
+            Console.WriteLine("  - Customers limpiados");
+
+            Console.WriteLine("Todas las tablas limpiadas.");
         }
 
         // --- Helper mejorado ---
@@ -44,7 +75,18 @@ namespace ETL.Infrastructure.Services
         // --- Bulk Inserts ---
         private void BulkInsertCustomers(List<Customer> customers, SqlConnection connection)
         {
-            var dt = new DataTable();
+            // Remover duplicados por CustomerID
+            var uniqueCustomers = customers
+                .GroupBy(c => c.CustomerID)
+                .Select(g => g.First())
+                .ToList();
+
+            if (uniqueCustomers.Count != customers.Count)
+            {
+                Console.WriteLine($"Removidos {customers.Count - uniqueCustomers.Count} Customers duplicados");
+            }
+
+            var dt = new System.Data.DataTable();
             dt.Columns.Add("CustomerID", typeof(int));
             dt.Columns.Add("FirstName", typeof(string));
             dt.Columns.Add("LastName", typeof(string));
@@ -53,7 +95,7 @@ namespace ETL.Infrastructure.Services
             dt.Columns.Add("City", typeof(string));
             dt.Columns.Add("Country", typeof(string));
 
-            foreach (var c in customers)
+            foreach (var c in uniqueCustomers)
             {
                 dt.Rows.Add(
                     c.CustomerID,
@@ -82,11 +124,22 @@ namespace ETL.Infrastructure.Services
             bulk.ColumnMappings.Add("Country", "Country");
 
             bulk.WriteToServer(dt);
-            Console.WriteLine($"Inserted {customers.Count} customers.");
+            Console.WriteLine($"Inserted {uniqueCustomers.Count} customers.");
         }
 
         private void BulkInsertProducts(List<Product> products, SqlConnection connection)
         {
+            // Remover duplicados por ProductID
+            var uniqueProducts = products
+                .GroupBy(p => p.ProductID)
+                .Select(g => g.First())
+                .ToList();
+
+            if (uniqueProducts.Count != products.Count)
+            {
+                Console.WriteLine($"Removidos {products.Count - uniqueProducts.Count} Products duplicados");
+            }
+
             var dt = new DataTable();
             dt.Columns.Add("ProductID", typeof(int));
             dt.Columns.Add("ProductName", typeof(string));
@@ -94,7 +147,7 @@ namespace ETL.Infrastructure.Services
             dt.Columns.Add("Price", typeof(decimal));
             dt.Columns.Add("Stock", typeof(int));
 
-            foreach (var p in products)
+            foreach (var p in uniqueProducts)
             {
                 dt.Rows.Add(
                     p.ProductID,
@@ -118,18 +171,29 @@ namespace ETL.Infrastructure.Services
             bulk.ColumnMappings.Add("Stock", "Stock");
 
             bulk.WriteToServer(dt);
-            Console.WriteLine($"Inserted {products.Count} products.");
+            Console.WriteLine($"Inserted {uniqueProducts.Count} products.");
         }
 
         private void BulkInsertOrders(List<Order> orders, SqlConnection connection)
         {
+            // Remover duplicados por OrderID
+            var uniqueOrders = orders
+                .GroupBy(o => o.OrderID)
+                .Select(g => g.First())
+                .ToList();
+
+            if (uniqueOrders.Count != orders.Count)
+            {
+                Console.WriteLine($"Removidos {orders.Count - uniqueOrders.Count} Orders duplicados");
+            }
+
             var dt = new DataTable();
             dt.Columns.Add("OrderID", typeof(int));
             dt.Columns.Add("CustomerID", typeof(int));
             dt.Columns.Add("OrderDate", typeof(DateTime));
             dt.Columns.Add("Status", typeof(string));
 
-            foreach (var o in orders)
+            foreach (var o in uniqueOrders)
             {
                 dt.Rows.Add(
                     o.OrderID,
@@ -151,18 +215,30 @@ namespace ETL.Infrastructure.Services
             bulk.ColumnMappings.Add("Status", "Status");
 
             bulk.WriteToServer(dt);
-            Console.WriteLine($"Inserted {orders.Count} orders.");
+            Console.WriteLine($"Inserted {uniqueOrders.Count} orders.");
         }
 
         private void BulkInsertOrderDetails(List<OrderDetail> details, SqlConnection connection)
         {
+            // Remover duplicados antes de insertar
+            var uniqueDetails = details
+                .GroupBy(d => new { d.OrderID, d.ProductID })
+                .Select(g => g.First())
+                .ToList();
+
+            if (uniqueDetails.Count != details.Count)
+            {
+                Console.WriteLine($" Removidos {details.Count - uniqueDetails.Count} OrderDetails duplicados");
+                Console.WriteLine($" OrderDetails únicos: {uniqueDetails.Count}");
+            }
+
             var dt = new DataTable();
             dt.Columns.Add("OrderID", typeof(int));
             dt.Columns.Add("ProductID", typeof(int));
             dt.Columns.Add("Quantity", typeof(int));
             dt.Columns.Add("TotalPrice", typeof(decimal));
 
-            foreach (var d in details)
+            foreach (var d in uniqueDetails)
             {
                 dt.Rows.Add(
                     d.OrderID,
@@ -184,7 +260,7 @@ namespace ETL.Infrastructure.Services
             bulk.ColumnMappings.Add("TotalPrice", "TotalPrice");
 
             bulk.WriteToServer(dt);
-            Console.WriteLine($"Inserted {details.Count} order details.");
+            Console.WriteLine($"Inserted {uniqueDetails.Count} order details.");
         }
     }
 }

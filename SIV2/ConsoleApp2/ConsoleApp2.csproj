@@ -14,7 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ETL.Infraestructura\ETL.Infraestructura.csproj" />
+    <ProjectReference Include="..\..\..\source\repos\SAV\SIV2\ETL.Domian\ETL.Domian.csproj" />
+    <ProjectReference Include="..\ETL.Infraestructura - copia\ETL.Infraestructura.csproj" />
   </ItemGroup>
 
 </Project>
